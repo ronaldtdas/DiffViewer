@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Diff Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .diff-added {
+            background-color: #e6ffec;
+            border-left: 4px solid #2da44e;
+        }
+        .diff-removed {
+            background-color: #ffebe9;
+            border-left: 4px solid #cf222e;
+        }
+        .diff-neutral {
+            background-color: #ffffff;
+            border-left: 4px solid transparent;
+        }
+        .diff-header {
+            background-color: #f1f8ff;
+            color: #4b5563;
+            border-left: 4px solid #0969da;
+        }
+
+        .line-number {
+            user-select: none;
+            color: #6e7781;
+            text-align: right;
+            padding-right: 1rem;
+            min-width: 3rem;
+        }
+
+        /* Drag and drop overlay */
+        #drop-zone.drag-active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+    <!-- Navigation -->
+    <nav class="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-code-branch text-blue-400 text-xl"></i>
+                <h1 class="text-xl font-bold tracking-tight">Diff<span class="text-blue-400">Viewer</span></h1>
+            </div>
+            <div class="text-sm text-slate-400 hidden sm:block">
+                Drag & drop .diff files or paste text
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6">
+
+        <!-- Input Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Upload Area -->
+            <div class="lg:col-span-2 space-y-4">
+                <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center transition-all duration-200 bg-white hover:border-slate-400 flex flex-col items-center justify-center min-h-[200px] cursor-pointer relative group">
+                    <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept=".diff,.patch,.txt">
+                    
+                    <div class="group-hover:scale-105 transition-transform duration-200">
+                        <i class="fa-solid fa-cloud-arrow-up text-4xl text-blue-500 mb-4"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-slate-700">Drop your diff file here</h3>
+                    <p class="text-slate-500 text-sm mt-1">or click to browse</p>
+                    <p class="text-xs text-slate-400 mt-4">Supports .diff, .patch, .txt</p>
+                </div>
+
+                <div class="flex justify-between items-center">
+                   <div class="flex gap-2">
+                        <button onclick="loadSampleDiff()" class="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 rounded hover:bg-blue-50 transition-colors">
+                            <i class="fa-solid fa-flask mr-1"></i> Load Sample
+                        </button>
+                        <button onclick="clearAll()" class="text-sm text-red-600 hover:text-red-800 font-medium px-3 py-1.5 rounded hover:bg-red-50 transition-colors">
+                            <i class="fa-solid fa-trash mr-1"></i> Clear
+                        </button>
+                   </div>
+                   <span id="status-msg" class="text-sm font-medium text-slate-500 fade-in"></span>
+                </div>
+            </div>
+
+            <!-- Paste Area -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col h-full">
+                <label for="paste-input" class="text-sm font-semibold text-slate-700 mb-2 flex justify-between">
+                    <span>Paste Diff Text</span>
+                    <i class="fa-regular fa-clipboard text-slate-400"></i>
+                </label>
+                <textarea id="paste-input" class="w-full flex-grow code-font text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 resize-none focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Paste raw diff content here..."></textarea>
+                <button onclick="processPastedText()" class="mt-3 w-full bg-slate-800 text-white py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors shadow-sm">
+                    View Diff
+                </button>
+            </div>
+        </div>
+
+        <!-- Output Section -->
+        <div id="diff-output" class="space-y-6 empty:hidden">
+            <!-- Diffs will be injected here -->
+        </div>
+        
+        <!-- Empty State -->
+        <div id="empty-state" class="text-center py-12 text-slate-400">
+            <i class="fa-solid fa-code text-6xl mb-4 text-slate-200"></i>
+            <p>Upload a file or paste text to visualize changes</p>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-6 mt-8">
+        <div class="max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm">
+            Git Diff Viewer &bull; pure client-side processing
+        </div>
+    </footer>
+
+    <script>
+        // --- DOM Elements ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const pasteInput = document.getElementById('paste-input');
+        const diffOutput = document.getElementById('diff-output');
+        const emptyState = document.getElementById('empty-state');
+        const statusMsg = document.getElementById('status-msg');
+
+        // --- Event Listeners ---
+        
+        // File Input Change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                readFile(e.target.files[0]);
+            }
+        });
+
+        // Drag & Drop Handling
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-active');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+            if (e.dataTransfer.files.length) {
+                readFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // --- Core Functions ---
+
+        function readFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                parseAndRender(content);
+                showStatus(`Loaded: ${file.name}`);
+            };
+            reader.readAsText(file);
+        }
+
+        function processPastedText() {
+            const text = pasteInput.value.trim();
+            if (!text) {
+                showStatus("Please paste some text first", true);
+                return;
+            }
+            parseAndRender(text);
+            showStatus("Rendered from clipboard");
+        }
+
+        function showStatus(msg, isError = false) {
+            statusMsg.textContent = msg;
+            statusMsg.className = `text-sm font-medium fade-in ${isError ? 'text-red-500' : 'text-green-600'}`;
+            setTimeout(() => {
+                statusMsg.textContent = '';
+            }, 3000);
+        }
+
+        function clearAll() {
+            diffOutput.innerHTML = '';
+            pasteInput.value = '';
+            fileInput.value = '';
+            emptyState.style.display = 'block';
+            showStatus('Cleared');
+        }
+
+        function loadSampleDiff() {
+            const sample = `diff --git a/src/app.js b/src/app.js
+index 83a042..2093ba 100644
+--- a/src/app.js
++++ b/src/app.js
+@@ -10,7 +10,7 @@ function calculateTotal(items) {
+     return items.reduce((acc, item) => {
+-        return acc + item.price;
++        return acc + (item.price * item.quantity);
+     }, 0);
+ }
+ 
+@@ -25,4 +25,8 @@ function formatCurrency(amount) {
+-    return "$" + amount.toFixed(2);
++    return new Intl.NumberFormat('en-US', {
++        style: 'currency',
++        currency: 'USD'
++    }).format(amount);
+ }
++
++// Add new user validation
++function validateUser(user) {
++    return user.age >= 18;
++}
+diff --git a/styles/main.css b/styles/main.css
+index 5291aa..9201bb 100644
+--- a/styles/main.css
++++ b/styles/main.css
+@@ -50,3 +50,3 @@ body {
+-    background-color: #fff;
++    background-color: #f4f4f9;
+     color: #333;
+ }`;
+            pasteInput.value = sample;
+            parseAndRender(sample);
+            showStatus("Sample loaded");
+        }
+
+        // --- Parser & Renderer ---
+
+        function parseAndRender(rawDiff) {
+            emptyState.style.display = 'none';
+            diffOutput.innerHTML = '';
+
+            const files = parseDiff(rawDiff);
+            
+            if (files.length === 0) {
+                diffOutput.innerHTML = `
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800 text-center">
+                        <i class="fa-solid fa-circle-exclamation mr-2"></i> No valid diff data found. Ensure the format matches standard git diff output.
+                    </div>
+                `;
+                return;
+            }
+
+            files.forEach(file => {
+                const fileHTML = renderFile(file);
+                diffOutput.insertAdjacentHTML('beforeend', fileHTML);
+            });
+        }
+
+        function parseDiff(raw) {
+            const lines = raw.split(/\r?\n/);
+            const files = [];
+            let currentFile = null;
+            let currentChunk = null;
+            let inChunk = false;
+
+            // Simple state machine parser
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                // Detect new file start
+                if (line.startsWith('diff --git')) {
+                    if (currentFile) {
+                        if (currentChunk) currentFile.chunks.push(currentChunk);
+                        files.push(currentFile);
+                    }
+                    
+                    // Extract filenames
+                    const parts = line.split(' ');
+                    const aPath = parts[2].substring(2); // remove a/
+                    const bPath = parts[3].substring(2); // remove b/
+                    
+                    currentFile = {
+                        name: bPath || aPath,
+                        oldName: aPath,
+                        chunks: [],
+                        additions: 0,
+                        deletions: 0
+                    };
+                    currentChunk = null;
+                    inChunk = false;
+                    continue;
+                }
+
+                // Skip metadata lines until we hit a chunk header
+                if (!inChunk && !line.startsWith('@@')) {
+                    continue;
+                }
+
+                // Chunk header
+                if (line.startsWith('@@')) {
+                    if (currentChunk) currentFile.chunks.push(currentChunk);
+                    inChunk = true;
+                    
+                    // Parse line numbers: @@ -10,7 +10,7 @@
+                    // The format is usually @@ -oldStart,oldLines +newStart,newLines @@
+                    const matches = line.match(/@@ \-(\d+),?(\d*) \+(\d+),?(\d*) @@/);
+                    let oldStart = 0, newStart = 0;
+                    
+                    if (matches) {
+                        oldStart = parseInt(matches[1]);
+                        newStart = parseInt(matches[3]);
+                    }
+
+                    currentChunk = {
+                        header: line,
+                        lines: [],
+                        oldStart: oldStart,
+                        newStart: newStart
+                    };
+                    continue;
+                }
+
+                // Content lines
+                if (inChunk && currentFile && currentChunk) {
+                    // Check if we hit the start of a new diff command (edge case safety)
+                    if (line.startsWith('diff --git')) {
+                        i--; // Re-process this line in next iteration
+                        continue;
+                    }
+
+                    const type = line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : 'neu';
+                    
+                    if (type === 'add') currentFile.additions++;
+                    if (type === 'del') currentFile.deletions++;
+
+                    currentChunk.lines.push({
+                        type: type,
+                        content: line.substring(1) || ' ' // remove the marker, keep empty line if just newline
+                    });
+                }
+            }
+
+            // Push last items
+            if (currentFile) {
+                if (currentChunk) currentFile.chunks.push(currentChunk);
+                files.push(currentFile);
+            }
+
+            return files;
+        }
+
+        function renderFile(file) {
+            let html = `
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+                    <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                        <div class="flex items-center gap-3 font-medium text-slate-700">
+                            <i class="fa-regular fa-file-code text-slate-400"></i>
+                            <span>${escapeHtml(file.name)}</span>
+                        </div>
+                        <div class="text-xs font-bold flex gap-3">
+                            <span class="text-green-600">+${file.additions}</span>
+                            <span class="text-red-600">-${file.deletions}</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm code-font border-collapse">
+            `;
+
+            file.chunks.forEach(chunk => {
+                // Chunk Header
+                html += `
+                    <tr>
+                        <td colspan="3" class="diff-header px-4 py-1 text-xs select-none">
+                           ${escapeHtml(chunk.header)}
+                        </td>
+                    </tr>
+                `;
+
+                let oldLineNum = chunk.oldStart;
+                let newLineNum = chunk.newStart;
+
+                chunk.lines.forEach(line => {
+                    let rowClass = 'diff-neutral';
+                    let oldNumStr = oldLineNum;
+                    let newNumStr = newLineNum;
+                    let symbol = ' ';
+
+                    if (line.type === 'add') {
+                        rowClass = 'diff-added';
+                        oldNumStr = ''; // No old line number for added lines
+                        newLineNum++;
+                        symbol = '+';
+                    } else if (line.type === 'del') {
+                        rowClass = 'diff-removed';
+                        newNumStr = ''; // No new line number for deleted lines
+                        oldLineNum++;
+                        symbol = '-';
+                    } else {
+                        oldLineNum++;
+                        newLineNum++;
+                    }
+
+                    html += `
+                        <tr class="${rowClass} hover:opacity-90">
+                            <td class="line-number bg-opacity-10 w-12 text-slate-400 border-r border-slate-200/50" data-num="${oldNumStr}">${oldNumStr}</td>
+                            <td class="line-number bg-opacity-10 w-12 text-slate-400 border-r border-slate-200/50" data-num="${newNumStr}">${newNumStr}</td>
+                            <td class="px-4 py-0.5 whitespace-pre wrap-anywhere flex gap-2 w-full">
+                                <span class="select-none opacity-50 w-4 inline-block">${symbol}</span><span>${escapeHtml(line.content)}</span>
+                            </td>
+                        </tr>
+                    `;
+                });
+            });
+
+            html += `
+                        </table>
+                    </div>
+                </div>
+            `;
+            return html;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
