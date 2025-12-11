@@ -277,8 +277,33 @@ index 5291aa..9201bb 100644
                 return;
             }
 
-            files.forEach(file => {
-                const fileHTML = renderFile(file);
+            // 1. Render Summary / Index
+            const summaryHtml = `
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+                    <div class="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
+                        <h2 class="font-bold text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-blue-500"></i>
+                            Files Changed
+                            <span class="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full border border-slate-200">${files.length}</span>
+                        </h2>
+                    </div>
+                    <ul class="text-sm grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2 max-h-60 overflow-y-auto">
+                        ${files.map((f, i) => `
+                            <li>
+                                <a href="#file-${i+1}" class="flex items-center gap-2 text-slate-600 hover:text-blue-600 hover:bg-slate-50 p-1 rounded transition-colors group truncate">
+                                    <span class="font-mono text-xs text-slate-400 group-hover:text-blue-400 w-6 text-right select-none">#${i+1}</span>
+                                    <span class="truncate font-medium" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+                                </a>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `;
+            diffOutput.insertAdjacentHTML('beforeend', summaryHtml);
+
+            // 2. Render Individual Files
+            files.forEach((file, index) => {
+                const fileHTML = renderFile(file, index);
                 diffOutput.insertAdjacentHTML('beforeend', fileHTML);
             });
         }
@@ -376,11 +401,15 @@ index 5291aa..9201bb 100644
             return files;
         }
 
-        function renderFile(file) {
+        function renderFile(file, index) {
+            const fileNum = index + 1;
+            const fileId = `file-${fileNum}`;
+            
             let html = `
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
-                    <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                <div id="${fileId}" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6 scroll-mt-24">
+                    <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
                         <div class="flex items-center gap-3 font-medium text-slate-700">
+                            <span class="text-slate-400 font-mono text-sm select-none">#${fileNum}</span>
                             <i class="fa-regular fa-file-code text-slate-400"></i>
                             <span>${escapeHtml(file.name)}</span>
                         </div>
